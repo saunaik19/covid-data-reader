@@ -1,6 +1,8 @@
 package com.saurabh.example.coviddatareader.service;
 
 import com.saurabh.example.coviddatareader.constants.FilePathConstants;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -30,7 +32,7 @@ public class CovidRepoFileService {
 
     }
 
-    public List<Path> getAllFileForLocalDir(){
+    protected List<Path> getAllFileForLocalDir(){
         List<Path> allPaths=new ArrayList<>();
         try (Stream<Path> paths = Files.walk(Paths.get(FilePathConstants.LOCAL_COVID_REPO_DIR_PATH))) {
             paths.forEach(path->{
@@ -40,5 +42,24 @@ public class CovidRepoFileService {
             e.printStackTrace();
         }
         return allPaths;
+    }
+
+    public List<String> allFilePath(){
+        List<Path> allPaths=getAllFileForLocalDir();
+        List<String> allPathStr=new ArrayList<>(allPaths.size());
+        for(Path filePath: allPaths){
+            Resource resourceMulti=new FileSystemResource(filePath.toString());
+//            System.out.println("Path is "+filePath);
+            System.out.println("KHUP SAARYA FILES PAIKI ,File AHE KA ????"
+                    +resourceMulti.exists());
+            System.out.println("FILE PATH IS "+filePath);
+         //   allPathStr.add(filePath.toString());
+        }
+        allPaths.forEach(path->{
+            if(new FileSystemResource(path.toString()).exists() && path.toString().endsWith(".csv")){
+                allPathStr.add(path.toString());
+            }
+        });
+        return allPathStr;
     }
 }
