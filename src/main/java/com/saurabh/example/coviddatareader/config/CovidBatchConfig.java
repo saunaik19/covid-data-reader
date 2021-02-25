@@ -1,5 +1,8 @@
 package com.saurabh.example.coviddatareader.config;
 
+import com.saurabh.example.coviddatareader.batch.DBWriter;
+import com.saurabh.example.coviddatareader.batch.Processor;
+import com.saurabh.example.coviddatareader.model.CovidData;
 import com.saurabh.example.coviddatareader.model.CovidRawDataCSV;
 import com.saurabh.example.coviddatareader.service.CovidRepoFileService;
 import org.springframework.batch.core.Job;
@@ -7,6 +10,7 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.LineMapper;
@@ -45,85 +49,57 @@ public class CovidBatchConfig {
     private StepBuilderFactory stepBuilderFactory;
 
     @Bean
-    public MultiResourceItemReader<CovidRawDataCSV> multiResourceItemreader() {
-        MultiResourceItemReader<CovidRawDataCSV> reader = new MultiResourceItemReader<>();
-        reader.setDelegate(covidCSVFileItemReader());
-        reader.setResources(allCovidCSVInputFiles());
-        return reader;
-    }
-
-    @Bean
-    private FlatFileItemReader<CovidRawDataCSV> covidCSVFileItemReader() {
-
-        DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
-        tokenizer.setDelimiter(",");
-        tokenizer.setStrict(false);
-        System.out.println(Arrays.toString(fileMetadata));
-        tokenizer.setNames(fileMetadata);
-
-        FlatFileItemReader<CovidRawDataCSV> flatFileItemReader = new FlatFileItemReader<>();
+    public FlatFileItemReader<CovidRawDataCSV> covidRawDataCSVReader(){
+        FlatFileItemReader<CovidRawDataCSV> flatFileItemReader=new FlatFileItemReader<>();
+        //Set number of lines to skips. Use it if file has header rows.
         flatFileItemReader.setLinesToSkip(1);
-        flatFileItemReader.setLineMapper(covidCsvFileLineMapper());
-        flatFileItemReader.setStrict(false);
-        flatFileItemReader.setName("covid-data-reader");
-        return flatFileItemReader;
-    }
-
-    @Bean
-    private Resource[] allCovidCSVInputFiles() {
-        List<Path> allFilePath = covidRepoFileService.getAllFileForLocalDir();
-        List<Resource> allResources = new ArrayList<>(allFilePath.size());
-        allFilePath.forEach(path -> {
-            Resource resource = new FileSystemResource(path);
-            if (path.endsWith(".csv")) {
-                allResources.add(resource);
+        //Configure how each line will be parsed and mapped to different values
+        flatFileItemReader.setLineMapper(new DefaultLineMapper() {
+            {
+                setLineTokenizer(new DelimitedLineTokenizer() {
+                    {
+                        setNames(fileMetadata);
+                    }
+                });
+                //Set values in class
+                setFieldSetMapper(new BeanWrapperFieldSetMapper<CovidRawDataCSV>() {
+                    {
+                        setTargetType(CovidRawDataCSV.class);
+                    }
+                });
             }
         });
-        return allResources.toArray(new Resource[allFilePath.size()]);
-    }
-
-
-    @Bean
-    public LineMapper<CovidRawDataCSV> covidCsvFileLineMapper() {
-        DefaultLineMapper<CovidRawDataCSV> dataCSVDefaultLineMapper = new DefaultLineMapper<>();
-        DelimitedLineTokenizer delimitedLineTokenizer = new DelimitedLineTokenizer();
-        delimitedLineTokenizer.setDelimiter(",");
-        delimitedLineTokenizer.setStrict(false);
-        System.out.println(fileMetadata.toString());
-        System.out.println(Arrays.toString(fileMetadata));
-
-        delimitedLineTokenizer.setNames(fileMetadata);
-        BeanWrapperFieldSetMapper<CovidRawDataCSV> fieldSetMapper = new BeanWrapperFieldSetMapper<>();
-        fieldSetMapper.setTargetType(CovidRawDataCSV.class);
-        dataCSVDefaultLineMapper.setLineTokenizer(delimitedLineTokenizer);
-        dataCSVDefaultLineMapper.setFieldSetMapper(fieldSetMapper);
-        return dataCSVDefaultLineMapper;
+      return flatFileItemReader;
     }
 
     @Bean
-    public ItemWriter<CovidRawDataCSV> covidRawDataCSVItemWriter() {
-        return items -> {
-            for (CovidRawDataCSV covidRawDataCSV : items) {
-                System.out.println(covidRawDataCSV.toString());
-            }
-        };
+    public MultiResourceItemReader<CovidRawDataCSV> multiResourceItemReader()
+    {
+        MultiResourceItemReader<CovidRawDataCSV> resourceItemReader = new MultiResourceItemReader<CovidRawDataCSV>();
+        Resource[] inputResources=covidRepoFileService.allFileResources();
+        resourceItemReader.setResources(inputResources);
+        resourceItemReader.setDelegate(covidRawDataCSVReader());
+        return resourceItemReader;
+    }
+
+    @Bean
+    public Job readCovidFilesJob() {
+        return jobBuilderFactory
+                .get("readCSVFilesJob")
+                .incrementer(new RunIdIncrementer())
+                .start(step1())
+                .build();
     }
 
     @Bean
     public Step step1() {
-        return stepBuilderFactory.get("step1")
-                .<CovidRawDataCSV, CovidRawDataCSV>chunk(10)
-                .reader(multiResourceItemreader())
-                .writer(covidRawDataCSVItemWriter())
+        return stepBuilderFactory.get("step1").<CovidRawDataCSV, CovidData>chunk(10)
+                .reader(multiResourceItemReader())
+                .processor(new Processor())
+                .writer(new DBWriter())
                 .build();
     }
 
-    @Bean
-    public Job job() {
-        return jobBuilderFactory.get("job")
-                .start(step1())
-                .build();
-    }
 
 }
 
