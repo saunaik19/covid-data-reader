@@ -67,7 +67,7 @@ public class CovidRepoFileService {
         List<Resource> allResources=new ArrayList<>(allPaths.size());
         allPaths.forEach(path->{
             if(new FileSystemResource(path.toString()).exists() && path.toString().endsWith(".csv")
-            && path.toString().contains("csse_covid_19_daily_reports")){
+            ){
                 Resource resourceMulti=new FileSystemResource(path.toString());
                 allResources.add(resourceMulti);
                 //allPaths

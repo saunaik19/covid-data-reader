@@ -2,6 +2,7 @@ package com.saurabh.example.coviddatareader.config;
 
 import com.saurabh.example.coviddatareader.batch.DBWriter;
 import com.saurabh.example.coviddatareader.batch.Processor;
+import com.saurabh.example.coviddatareader.batch.SkipRecord;
 import com.saurabh.example.coviddatareader.model.CovidData;
 import com.saurabh.example.coviddatareader.model.CovidRawDataCSV;
 import com.saurabh.example.coviddatareader.service.CovidRepoFileService;
@@ -25,6 +26,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.lang.NonNull;
+import org.springframework.util.StringUtils;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -51,8 +53,7 @@ public class CovidBatchConfig {
     @Bean
     public FlatFileItemReader<CovidRawDataCSV> covidRawDataCSVReader(){
         FlatFileItemReader<CovidRawDataCSV> flatFileItemReader=new FlatFileItemReader<>();
-        //Set number of lines to skips. Use it if file has header rows.
-        flatFileItemReader.setLinesToSkip(1);
+
         //Configure how each line will be parsed and mapped to different values
         flatFileItemReader.setLineMapper(new DefaultLineMapper() {
             {
@@ -69,6 +70,9 @@ public class CovidBatchConfig {
                 });
             }
         });
+
+
+        flatFileItemReader.setLinesToSkip(1);
       return flatFileItemReader;
     }
 
@@ -94,6 +98,7 @@ public class CovidBatchConfig {
     @Bean
     public Step step1() {
         return stepBuilderFactory.get("step1").<CovidRawDataCSV, CovidData>chunk(10)
+                .faultTolerant().skipPolicy(new SkipRecord())
                 .reader(multiResourceItemReader())
                 .processor(new Processor())
                 .writer(new DBWriter())
